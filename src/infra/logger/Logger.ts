@@ -1,3 +1,4 @@
+const DEFAULT_LOG_LEVEL = 'debug';
 const LogLevels = {
 	'debug': {
 		level: 3,
@@ -35,14 +36,34 @@ function getLevel(level: keyof typeof LogLevels | number): number {
 }
 
 export class Logger {
-	private lowestLevel: number = 0;
-
-	constructor(private readonly name?: string, lowestLevel: keyof typeof LogLevels | number = 'debug') {
-		this.setLevel(lowestLevel);
-		// console.log('-------------------------------------', lowestLevel, getLevel(lowestLevel), LogLevels[lowestLevel] as unknown as any);
+	static instances = new Map<Logger, number>();
+	static setAllLogLevels(level: keyof typeof LogLevels | number): void {
+		for (const logger of Logger.instances.keys()) {
+			logger.setLogLevel(level);
+		}
+	}
+	static resetAllLogLevels(): void {
+		for (const logger of Logger.instances.keys()) {
+			logger.setLogLevel(Logger.instances.get(logger) ?? DEFAULT_LOG_LEVEL);
+		}
+	}
+	private _lowestLevel: number = 0;
+	get lowestLevel(): number {
+		return this._lowestLevel;
+	}
+	set lowestLevel(level: number) {
+		this._lowestLevel = level;
 	}
 
-	setLevel(level: keyof typeof LogLevels | number): void {
+	constructor(private readonly name?: string, lowestLevel: keyof typeof LogLevels | number = DEFAULT_LOG_LEVEL) {
+		this.setLogLevel(lowestLevel);
+		Logger.instances.set(this, this.lowestLevel);
+	}
+
+
+
+	// Alias for setLevel for consistency with other APIs
+	setLogLevel(level: keyof typeof LogLevels | number): void {
 		this.lowestLevel = getLevel(level);
 	}
 

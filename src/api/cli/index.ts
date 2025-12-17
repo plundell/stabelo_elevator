@@ -10,6 +10,7 @@ import { ButtonsCommand } from './commands/ButtonsCommand';
 import { WatchCommand } from './commands/WatchCommand';
 import { InfoCommand } from './commands/InfoCommand';
 import { SimulateCommand } from './commands/SimulateCommand';
+import { LogCommand } from './commands/LogCommand';
 import { Logger } from '../../infra/logger/Logger';
 import { Application } from '../../app/app';
 import { CliOptions } from '../../options';
@@ -37,6 +38,7 @@ export class CliApi {
 		// System commands
 		(new HealthCommand(this.app, this.logger)).register(this.cli);
 		(new ExitCommand(this.app, this.logger)).register(this.cli);
+		(new LogCommand(this.app, this.logger)).register(this.cli);
 
 		// Elevator service commands
 		(new AddRideCommand(this.app, this.logger)).register(this.cli);
