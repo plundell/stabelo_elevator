@@ -64,7 +64,7 @@ export class ListElevatorsCommand extends BaseCommand {
 		// Clear screen and show initial render
 		this.clearScreen();
 		this.renderList(options);
-		console.log('\nPress Ctrl+D to stop watching (Ctrl+C to exit app)\n');
+		console.log('\nPress q or Esc to stop watching (Ctrl+C to exit app)\n');
 
 		// Set up interval to continuously update
 		const updateInterval = setInterval(() => {
@@ -74,32 +74,51 @@ export class ListElevatorsCommand extends BaseCommand {
 			}
 			this.clearScreen();
 			this.renderList(options);
-			console.log('\nPress Ctrl+D to stop watching (Ctrl+C to exit app)\n');
+			console.log('\nPress q or Esc to stop watching (Ctrl+C to exit app)\n');
 		}, interval);
 
-		// Save original stdin settings
+		// Save original stdin settings and enable raw mode
 		const wasRaw = process.stdin.isRaw;
+		const wasResumed = process.stdin.readableFlowing !== null;
+
 		process.stdin.setRawMode(true);
-		process.stdin.resume();
+		if (!wasResumed) {
+			process.stdin.resume();
+		}
 
 		// Listen for keypresses
 		const keypressHandler = (chunk: Buffer) => {
-			// Ctrl+D is ASCII code 4 (EOT - End of Transmission)
-			if (chunk[0] === 4) {
+			// Check for 'q' key (ASCII 113) or Esc key (ASCII 27)
+			if (chunk[0] === 113 || chunk[0] === 27) {
 				// Stop watching
 				isWatching = false;
 				clearInterval(updateInterval);
-				
+
 				// Restore stdin settings
-				process.stdin.setRawMode(wasRaw);
+				if (wasRaw !== undefined) {
+					process.stdin.setRawMode(wasRaw);
+				}
+				if (!wasResumed) {
+					process.stdin.pause();
+				}
+
 				process.stdin.removeListener('data', keypressHandler);
-				
+
 				// Clear the screen one last time and show stop message
 				this.clearScreen();
 				console.log('Watch mode stopped\n');
 			}
-			// Ctrl+C is ASCII code 3 (ETX - End of Text)
-			// Let it propagate normally to exit the entire app
+			// Ctrl+C is ASCII code 3 - let it propagate to exit the app
+			else if (chunk[0] === 3) {
+				// Clean up before exit
+				clearInterval(updateInterval);
+				if (wasRaw !== undefined) {
+					process.stdin.setRawMode(wasRaw);
+				}
+				process.stdin.removeListener('data', keypressHandler);
+				// Let the signal propagate
+				process.kill(process.pid, 'SIGINT');
+			}
 		};
 
 		process.stdin.on('data', keypressHandler);
