@@ -25,7 +25,6 @@ export type ElevatorIOOptions = Pick<AppOptions, 'INITIAL_FLOOR' | 'TRAVEL_TIME_
 
 type SettableState = DistributiveOmit<ElevatorStates, 'startTime'>;
 
-
 /**
  * The ElevatorIO class is responsible for providing the IO of the elevator state machine.
  */
@@ -73,7 +72,8 @@ export class ElevatorIO extends TypedEventEmitter<ElevatorEventMap> {
 	private setState<K extends ElevatorStateType>(state: Extract<SettableState, { type: K }>): void { //TODO: do we need extract here?
 		const oldState = this.state;
 		this.state = { ...state, startTime: Date.now() }
-		this.logger?.debug(`State changed from ${oldState.type} to ${this.state.type}`);
+		// `\x1b[32m[${String(name)}]`
+		this.logger?.debug(`\x1b[32mState changed from \x1b[33m${oldState.type}\x1b[32m to \x1b[38;5;208m${this.state.type}\x1b[32m\x1b[0m `);
 		this.emit(this.state.type, { ...this.state });
 		this.emit('change', { from: oldState, to: this.state }); //makes it easy to listen to all state changes
 	}
