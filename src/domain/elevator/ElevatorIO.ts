@@ -45,12 +45,18 @@ export class ElevatorIO extends TypedEventEmitter<ElevatorEventMap> {
 	 * 
 	 * Only changed by setter {@link setState()} which also the change as events.
 	 */
-	private state!: ElevatorStates; //! = Initialized in constructor via setState()
+	private state: ElevatorStates; //! = Initialized in constructor via setState()
 
 
+	/**
+	 * Initialize the ElevatorIO with the initial state. This should happen before the elevator is started.
+	 * @param options - The options for the ElevatorIO.
+	 * @param logger - The logger for the ElevatorIO.
+	 */
 	constructor(private readonly options: ElevatorIOOptions, logger?: Logger) {
 		super(logger);
-		this.setState({ type: ElevatorStateType.IDLE, atFloor: options.INITIAL_FLOOR });
+		//ugly workaround setting it here directly the first time
+		this.state = { type: ElevatorStateType.IDLE, atFloor: options.INITIAL_FLOOR, startTime: Date.now() };
 	}
 
 

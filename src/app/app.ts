@@ -31,7 +31,7 @@ export class Application {
 		// Initialize the main elevator service and populate it with elevators
 		this.elevatorService = new ElevatorService(this.options, new Logger('ElevatorService'));
 		for (let i = 0; i < this.options.NR_OF_ELEVATORS; i++) {
-			const id = `Elevator#${i.toString()}`;
+			const id = `Elevator#${(i + 1).toString()}`; //so we get pretty names starting at 1
 			const logger = new Logger(id);
 			const strategy = new InsertOrder(this.options, logger);
 			const elevator = new Elevator(id, strategy, this.options, logger);
