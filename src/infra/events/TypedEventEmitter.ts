@@ -13,7 +13,7 @@ type AnyArgs = any;
  */
 export type EventMap = Record<string, AnyArgs>;
 
-
+const tag = (name: string | number | symbol) => `\x1b[31m[${String(name)}]\x1b[0m `
 
 /**
  * A typed event emitter that allows for type-safe event emission and listening.
@@ -34,7 +34,7 @@ export class TypedEventEmitter<T extends EventMap> extends EventEmitter {
 	 * @returns True if the event was emitted, false otherwise.
 	 */
 	emit<K extends keyof T>(event: K | symbol, arg: T[K]): boolean {
-		this.logger?.debug(`Emitting event '${String(event)}' with arg: ${JSON.stringify(arg)}`);
+		this.logger?.debug(`${tag(event)} ${JSON.stringify(arg)}`);
 		return super.emit(event as string, arg);
 	}
 
