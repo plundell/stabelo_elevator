@@ -8,15 +8,16 @@ import { getUsageMessage } from './api/cli/usage';
 import { Application } from './app/app';
 import { defaultOptions, parseOptions } from './options';
 
-// Load environment variables
+// Load environment variables and merge them with default options, making
+// sure they're immutable from now on.
 dotenv.config({ path: '.env' });
-
-// Parse environment variables and merge with defaults
-const options = parseOptions(process.env, defaultOptions);
+const options = Object.freeze(parseOptions(process.env, defaultOptions));
 
 
-// Usage message for the CLI
-const usageMessage = getUsageMessage();
+// Create a logger for the main application
+const logger = new Logger('Main', options.LOG_LEVEL);
+
+
 
 // Determine the running mode and command arguments
 const args = [...process.argv];
@@ -32,19 +33,21 @@ const shouldStartHttp = eatFlag(args, '--http');
 const shouldStartCli = eatFlag(args, '--cli');
 const runOnetimeCommand = args.length > 2; //if any args are left that'll be a command
 
-const logger = new Logger('Main', 'debug');
 
-// Start the core application
-const app = new Application(options);
+
+// Start the core application which will continue running until the process is killed.
+const app = new Application(options, new Logger('App', options.LOG_LEVEL));
 app.start().catch((error) => {
 	logger.error('Failed to start application:', error);
 	process.exit(1);
 });
 
+
+
 if (runOnetimeCommand) {
 	//forbidden to use command arguments with --cli or --http flags
 	if (shouldStartCli || shouldStartHttp) {
-		logger.error(usageMessage);
+		logger.error(getUsageMessage());
 		logger.error('Cannot use command arguments with --cli or --http flags.');
 		process.exit(1);
 	}

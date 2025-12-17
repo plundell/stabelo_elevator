@@ -14,3 +14,11 @@ export class TimeoutError extends DomainError {
 		super(message ?? `Timeout after ${timeout}ms at ${new Date().toISOString()}`, context, cause);
 	}
 }
+
+
+
+export class ElevatorNotFoundError extends DomainError {
+	constructor(message: string, context?: Record<string, unknown>, cause?: Error) {
+		super(message, context, cause);
+	}
+}

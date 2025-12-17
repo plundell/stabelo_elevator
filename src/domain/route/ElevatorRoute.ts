@@ -1,15 +1,29 @@
 import { TypedMap } from "../../shared/util/TypedMap";
 import { RouteItem } from "./RouteItem";
-import { Floor, ConditionalFloor, validateFloor } from "./Floors";
+import { Floor, ConditionalFloor, validateFloor, isFloor } from "./Floors";
+import { TypedEventEmitter } from "../../infra/events/TypedEventEmitter";
+import { Logger } from "../../infra/logger/Logger";
 
+/**
+ * An event emitted both then new floors are requested to be visited and when they are visited.
+ * This helps clients keep track of which buttons should be lit up.
+ */
+export type ButtonActiveEvent = { floor: Floor, active: boolean }
 
-
+/**
+ * Events which can be emitted by the ElevatorRoute class. 
+ */
+export type ElevatorRouteEventMap = {
+	buttons: ButtonActiveEvent
+}
 
 
 /**
  * This class keeps track of the floors an elevator has been told to visit.
  */
-export class ElevatorRoute implements Iterable<Floor> {
+export class ElevatorRoute extends TypedEventEmitter<ElevatorRouteEventMap> implements Iterable<Floor> {
+
+
 	/**
 	 * A ordered queue of floors to visit. Technically we're using a Map in a typesafe wrapper.
 	 * The reason we're using a Map and not:
@@ -33,15 +47,22 @@ export class ElevatorRoute implements Iterable<Floor> {
 	private deleteOnVisit = new Map<Floor, Array<ConditionalFloor>>();
 	//TODO: I may be wrong here. maybe this can go on RouteItem...
 
-	constructor(routeToCopy?: ElevatorRoute) {
-		if (routeToCopy) {
-			for (const floor of routeToCopy.route.keys()) {
-				const item = routeToCopy.route.get(floor);
+	//TODO: this feels ugly. we have the same class EventRoute which sometimes is treaded as an entity and sometimes as a 
+	//      value object, that's no good.... not cleeeean...
+	constructor(logger?: Logger);
+	constructor(routeToCopy?: ElevatorRoute);
+	constructor(arg?: ElevatorRoute | Logger) {
+		//Call super TypedEventEmitter with the logger if it's provided.
+		super(arg instanceof Logger ? arg : undefined);
+
+		//If the argument is an ElevatorRoute, copy its route. Do not copy the logger from the original 
+		if (arg instanceof ElevatorRoute) {
+			for (const floor of arg.route.keys()) {
+				const item = arg.route.get(floor);
 				this.route.set(floor, item instanceof RouteItem ? item.copy() : item!); //! to make typescript happy. it never is undef because .keys()
 				//NOTE: floor can be a ConditionalFloor and we add that as-is, i.e. as an object. If we
 				// didn't that would break the link to it in whichever RouteItem holds it.
 			}
-
 		}
 	}
 
@@ -89,7 +110,9 @@ export class ElevatorRoute implements Iterable<Floor> {
 	}
 
 	/**
-	 * Get an array of the floors in the order {@link addRide()} was called. 
+	 * Get an array of the floors in the order {@link addRide()} was called. This will
+	 * include **both** Floor and ConditionalFloor, but they will all have been converted 
+	 * to {@link Floor} numbers.
 	 * 
 	 * @throws Never
 	 */
@@ -97,6 +120,14 @@ export class ElevatorRoute implements Iterable<Floor> {
 		return Array.from(this);
 	}
 
+	//TODO: The naming here is confusing. Buttons. Floors. Route. Queue.... must fix!
+	/**
+	 * Get an array of {@link Floor} **only**, in no particular order. 
+	 * These represent the "floors in the route" or "the buttons which are currently lit up"
+	 */
+	getPushedButtons(): Floor[] {
+		return Array.from(this.route.keys()).filter(isFloor);
+	}
 
 	/**
 	 * Get the last floor in the route.
@@ -139,6 +170,7 @@ export class ElevatorRoute implements Iterable<Floor> {
 			//...if not create a new RouteItem and add it
 			item = new RouteItem(pickup);
 			this.route.set(pickup, item);
+			this.emit('buttons', { floor: pickup, active: true });
 		} else {
 			//...if it is increment the request count
 			item.requestAgain();
@@ -229,6 +261,7 @@ export class ElevatorRoute implements Iterable<Floor> {
 
 		//Finally remove from the queue and return true
 		this.route.delete(floor);
+		this.emit('buttons', { floor: floor, active: false });
 		return true;
 	}
 

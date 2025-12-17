@@ -1,11 +1,12 @@
 import { ElevatorIO } from "./ElevatorIO";
-import { ElevatorEventMap, ElevatorStateType, IdleState } from "./types";
+import { ElevatorStateType, IdleState } from "./types";
 import { ElevatorRoute } from "../route/ElevatorRoute";
 import { Logger } from "../../infra/logger/Logger";
 import { Strategy } from "../strategies/Strategy";
 import { Floor, validateFloors } from "../route/Floors";
 import type { AppOptions } from "../../options";
 import type { ElevatorIOOptions } from "./ElevatorIO";
+import { ExplicitAny } from "../../shared/types/helpers";
 
 export type ElevatorOptions = Pick<AppOptions, 'MIN_FLOOR' | 'MAX_FLOOR'> & ElevatorIOOptions;
 export type ElevatorId = string;
@@ -23,9 +24,9 @@ export type ElevatorId = string;
  * will start being emitted.
  */
 export class Elevator {
-	private route: ElevatorRoute;
-	private io: ElevatorIO;
-
+	public readonly route: ElevatorRoute;
+	public readonly io: ElevatorIO;
+	private _running_listener?: (...args: ExplicitAny[]) => void;
 
 	constructor(
 		public readonly id: ElevatorId
@@ -36,10 +37,49 @@ export class Elevator {
 		this.route = new ElevatorRoute();
 		this.io = new ElevatorIO(options, logger);
 
-		//Connect to the IO which effectively "turns on" this state machine by which I mean
-		//any state changes will now trigger yet another action.
-		this.io.listen(ElevatorStateType.IDLE, this.tellElevatorWhatToDoNext.bind(this));
 	}
+
+	/**
+	 * Start the elevator.
+	 * 
+	 * This will connect to the IO which effectively "turns on" this state machine by which I mean
+	 * any state changes will now trigger yet another action.
+	 * 
+	 * @param soft - If true, will not warn or throw an error if the elevator is already running.
+	 */
+	start(soft: boolean = false): void {
+		if (this.isRunning()) {
+			if (!soft) {
+				this.logger?.warn('Elevator is already running');
+			}
+			return;
+		}
+		const listener = this.tellElevatorWhatToDoNext.bind(this);
+		this.io.listen(ElevatorStateType.IDLE, listener);
+		this._running_listener = listener;
+	}
+
+	/**
+	 * Check if the elevator is running.
+	 * @returns True if the elevator is running, false otherwise.
+	 */
+	isRunning(): boolean {
+		if (this._running_listener) {
+			return this.io.listeners(ElevatorStateType.IDLE).includes(this._running_listener);
+		}
+		return false;
+	}
+
+	/**
+	 * Graceful shutdown handler. 
+	 * 
+	 * Currently this only only removes all listeners (internal and external) for state change events.
+	 */
+	shutdown(): void {
+		this.io.removeAllListeners();
+		this.route.removeAllListeners();
+	}
+
 
 	/**
 	 * Tell the elevator what to do next. This handler can be called anytime the elevator is idle.
@@ -68,14 +108,6 @@ export class Elevator {
 	}
 
 
-	/**
-	 * Graceful shutdown handler. 
-	 * 
-	 * Currently this only only removes all listeners (internal and external) for state change events.
-	 */
-	shutdown(): void {
-		this.io.removeAllListeners();
-	}
 
 
 
@@ -107,21 +139,7 @@ export class Elevator {
 	}
 
 
-	/**
-	 * @see {@link ElevatorIO.getState} which this is a direct proxy for.
-	 */
-	getState = (...args: Parameters<typeof ElevatorIO.prototype.getState>) => this.io.getState(...args);
 
-
-	/**
-	 * Listen to state changes from this elevator. This allows external clients to be notified about where
-	 * this elevator is and what it's doing.
-	 *
-	 * @param cb - The callback which will receive the state change event.
-	 */
-	listenToStateChanges(cb: (event: ElevatorEventMap['change']) => void): void {
-		this.io.listen('change', cb);
-	}
 
 
 	/**
