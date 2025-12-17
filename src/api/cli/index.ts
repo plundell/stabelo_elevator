@@ -3,6 +3,12 @@ import * as readline from 'readline';
 import { HealthCommand } from './commands/HealthCommand';
 import { ExitCommand } from './commands/ExitCommand';
 import { HelpCommand } from './commands/HelpCommand';
+import { AddRideCommand } from './commands/AddRideCommand';
+import { ListElevatorsCommand } from './commands/ListElevatorsCommand';
+import { StatusCommand } from './commands/StatusCommand';
+import { ButtonsCommand } from './commands/ButtonsCommand';
+import { WatchCommand } from './commands/WatchCommand';
+import { InfoCommand } from './commands/InfoCommand';
 import { Logger } from '../../infra/logger/Logger';
 import { Application } from '../../app/app';
 
@@ -26,8 +32,17 @@ export class CliApi {
 		this.helpCommand = new HelpCommand(); //store for later where we access it directly
 		this.helpCommand.register(this.cli);
 
+		// System commands
 		(new HealthCommand(this.app)).register(this.cli);
 		(new ExitCommand(this.app)).register(this.cli);
+
+		// Elevator service commands
+		(new AddRideCommand(this.app)).register(this.cli);
+		(new ListElevatorsCommand(this.app)).register(this.cli);
+		(new StatusCommand(this.app)).register(this.cli);
+		(new ButtonsCommand(this.app)).register(this.cli);
+		(new WatchCommand(this.app)).register(this.cli);
+		(new InfoCommand(this.app)).register(this.cli);
 	}
 
 
@@ -53,6 +68,7 @@ export class CliApi {
 			// Only exit on actual errors if not in keepAlive mode
 			// Note: exit/quit commands call process.exit directly, bypassing this
 			if (err.exitCode !== 0 && !keepAlive) {
+				this.logger.error(`Exiting with code ${err.exitCode}`);
 				process.exit(err.exitCode);
 			}
 			// Otherwise, just return and keep the process alive

@@ -4,7 +4,7 @@ import { type AppOptions } from "../../options";
 import { BUGBUG } from "../../shared/errors/Bug";
 import { Elevator, type ElevatorId } from "../elevator/Elevator";
 import { ElevatorStateChangeEvent, ElevatorStates } from "../elevator/types";
-import { DomainError } from "../errors/DomainErrors";
+import { DomainError, ElevatorNotFoundError } from "../errors/DomainErrors";
 import { validateFloors, type Floor } from "../route/Floors";
 import { ElevatorServiceEventMap } from "./types";
 
@@ -121,10 +121,13 @@ export class ElevatorService extends TypedEventEmitter<ElevatorServiceEventMap> 
 		return [...this.elevators.keys()];
 	}
 
+	/**
+	 * Get an elevator by id or throw a {@link DomainError} if it doesn't exist.
+	 */
 	private getElevator(id: ElevatorId): Elevator {
 		const elevator = this.elevators.get(id);
 		if (!elevator) {
-			throw new DomainError(`Elevator ${id} not found`);
+			throw new ElevatorNotFoundError(`Elevator ${id} not found`);
 		}
 		return elevator;
 	}

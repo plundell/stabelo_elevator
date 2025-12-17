@@ -43,7 +43,8 @@ export class Logger {
 
 	private format(level: keyof typeof LogLevels, message: string): string {
 		const nameTag = this.name ? `\x1b[35m[${this.name}]\x1b[0m ` : "";
-		return `${LogLevels[level].color}[${level.toUpperCase()}]\x1b[0m ${nameTag}${message}`;
+		const levelTag = `\x1b[${LogLevels[level].color}[${level.toUpperCase()}]\x1b[0m`;
+		return `${levelTag} ${nameTag}${message}`;
 	}
 
 	log(level: keyof typeof LogLevels, message: string, ...optionalParams: any[]): void {
