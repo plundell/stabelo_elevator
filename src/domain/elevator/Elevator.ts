@@ -30,7 +30,7 @@ export class Elevator {
 
 	constructor(
 		public readonly id: ElevatorId
-		, private readonly travelStrategy: Strategy
+		, private travelStrategy: Strategy
 		, public readonly options: ElevatorOptions
 		, public readonly logger?: Logger
 	) {
@@ -80,6 +80,18 @@ export class Elevator {
 		this.route.removeAllListeners();
 	}
 
+
+	/**
+	 * Change the travel strategy of the elevator.
+	 * @param travelStrategy - The new travel strategy.
+	 */
+	changeTravelStrategy(travelStrategy: Strategy): void {
+		if (this.travelStrategy === travelStrategy) {
+			return;
+		}
+		this.logger?.info(`Changing travel strategy from ${this.travelStrategy.constructor.name} to ${travelStrategy.constructor.name}`);
+		this.travelStrategy = travelStrategy;
+	}
 
 	/**
 	 * Tell the elevator what to do next. This handler can be called anytime the elevator is idle.

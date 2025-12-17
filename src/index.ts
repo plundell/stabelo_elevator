@@ -51,7 +51,7 @@ if (runOnetimeCommand) {
 		logger.error('Cannot use command arguments with --cli or --http flags.');
 		process.exit(1);
 	}
-	(new CliApi(app)).run(args, false).catch((error) => { //false means don't keep the process alive
+	(new CliApi(app, options)).run(args, false).catch((error) => { //false means don't keep the process alive
 		console.error(error);
 		process.exit(1);
 	}).finally(() => {
@@ -62,7 +62,7 @@ if (runOnetimeCommand) {
 	//if either flag is present we're going to run at least one service...
 
 	if (shouldStartCli) {
-		(new CliApi(app)).run(args, true).catch((error) => { //true means keep the process alive
+		(new CliApi(app, options)).run(args, true).catch((error) => { //true means keep the process alive
 			logger.error(error);
 			// process.exit(1);
 		});

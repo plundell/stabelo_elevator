@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { Application } from '../../../app/app';
 import { BaseCommand } from './CommandBase';
+import { Logger } from '../../../infra/logger/Logger';
 
 /**
  * Command to list all elevators in the elevator service.
@@ -11,8 +12,8 @@ import { BaseCommand } from './CommandBase';
  */
 export class ListElevatorsCommand extends BaseCommand {
 
-	constructor(private readonly app: Application) {
-		super('ListElevatorsCommand');
+	constructor(private readonly app: Application, logger?: Logger) {
+		super(logger);
 	}
 
 	register(program: Command): void {
@@ -22,6 +23,8 @@ export class ListElevatorsCommand extends BaseCommand {
 			.description('List all elevators and their current status')
 			.option('-j, --json', 'Output in JSON format')
 			.option('-s, --simple', 'Show only elevator IDs')
+			.option('-w, --watch', 'Watch mode: continuously update the display')
+			.option('-i, --interval <ms>', 'Update interval in milliseconds for watch mode', '500')
 			.action((options) => {
 				this.execute(options);
 			});
@@ -32,7 +35,92 @@ export class ListElevatorsCommand extends BaseCommand {
 	 * 
 	 * @param options - Command options for output formatting
 	 */
-	private execute(options: { json?: boolean; simple?: boolean }): void {
+	private execute(options: { json?: boolean; simple?: boolean; watch?: boolean; interval?: string }): void {
+		// If watch mode is enabled, set up continuous updates
+		if (options.watch) {
+			this.executeWatchMode(options);
+			return;
+		}
+
+		// Otherwise, run once and return
+		this.renderList(options);
+	}
+
+	/**
+	 * Execute the list command in watch mode with continuous updates.
+	 * 
+	 * @param options - Command options for output formatting
+	 */
+	private executeWatchMode(options: { json?: boolean; simple?: boolean; interval?: string }): void {
+		const interval = parseInt(options.interval || '500', 10);
+
+		if (isNaN(interval) || interval < 100) {
+			this.logger.error('Interval must be at least 100ms');
+			return;
+		}
+
+		let isWatching = true;
+
+		// Clear screen and show initial render
+		this.clearScreen();
+		this.renderList(options);
+		console.log('\nPress Ctrl+D to stop watching (Ctrl+C to exit app)\n');
+
+		// Set up interval to continuously update
+		const updateInterval = setInterval(() => {
+			if (!isWatching) {
+				clearInterval(updateInterval);
+				return;
+			}
+			this.clearScreen();
+			this.renderList(options);
+			console.log('\nPress Ctrl+D to stop watching (Ctrl+C to exit app)\n');
+		}, interval);
+
+		// Save original stdin settings
+		const wasRaw = process.stdin.isRaw;
+		process.stdin.setRawMode(true);
+		process.stdin.resume();
+
+		// Listen for keypresses
+		const keypressHandler = (chunk: Buffer) => {
+			// Ctrl+D is ASCII code 4 (EOT - End of Transmission)
+			if (chunk[0] === 4) {
+				// Stop watching
+				isWatching = false;
+				clearInterval(updateInterval);
+				
+				// Restore stdin settings
+				process.stdin.setRawMode(wasRaw);
+				process.stdin.removeListener('data', keypressHandler);
+				
+				// Clear the screen one last time and show stop message
+				this.clearScreen();
+				console.log('Watch mode stopped\n');
+			}
+			// Ctrl+C is ASCII code 3 (ETX - End of Text)
+			// Let it propagate normally to exit the entire app
+		};
+
+		process.stdin.on('data', keypressHandler);
+	}
+
+	/**
+	 * Clear the terminal screen and move cursor to top-left.
+	 * Uses ANSI escape codes for cross-platform terminal clearing.
+	 */
+	private clearScreen(): void {
+		// Clear screen: \x1Bc (full reset) or \x1B[2J (clear) + \x1B[H (home)
+		// Using the more compatible clear + home approach
+		process.stdout.write('\x1B[2J\x1B[H');
+	}
+
+	/**
+	 * Render the elevator list once.
+	 * 
+	 * @param options - Command options for output formatting
+	 */
+	private renderList(options: { json?: boolean; simple?: boolean }): void {
 		try {
 			// Get all elevator IDs from the service
 			const elevatorIds = this.app.elevatorService.listElevators();

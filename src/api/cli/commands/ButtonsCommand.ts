@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import { Application } from '../../../app/app';
 import { BaseCommand } from './CommandBase';
+import { Logger } from '../../../infra/logger/Logger';
+import { normalizeElevatorId, getElevatorNotFoundMessage } from './CommandHelpers';
 
 /**
  * Command to view the pushed buttons (queued floor stops) for elevators.
@@ -11,8 +13,8 @@ import { BaseCommand } from './CommandBase';
  */
 export class ButtonsCommand extends BaseCommand {
 
-	constructor(private readonly app: Application) {
-		super('ButtonsCommand');
+	constructor(private readonly app: Application, logger?: Logger) {
+		super(logger);
 	}
 
 	register(program: Command): void {
@@ -20,7 +22,7 @@ export class ButtonsCommand extends BaseCommand {
 			.command('buttons')
 			.alias('btn')
 			.description('Show pushed buttons (queued stops) for one or all elevators')
-			.argument('[elevator-id]', 'Specific elevator ID to check (optional)')
+			.argument('[elevator-id]', 'Specific elevator ID to check (e.g., #1, 2, or Elevator#3)')
 			.option('-j, --json', 'Output in JSON format')
 			.option('-c, --count', 'Show only the count of queued stops')
 			.action((elevatorId: string | undefined, options) => {
@@ -40,14 +42,21 @@ export class ButtonsCommand extends BaseCommand {
 	): void {
 		try {
 			// Determine which elevators to query
-			const elevatorIds = elevatorId
-				? [elevatorId]
-				: this.app.elevatorService.listElevators();
+			let elevatorIds: string[];
 
-			// Validate that the specific elevator exists if one was requested
-			if (elevatorId && !this.app.elevatorService.listElevators().includes(elevatorId)) {
-				this.logger.error(`Elevator '${elevatorId}' not found`);
-				return;
+			if (elevatorId) {
+				// Normalize the elevator ID (supports shorthand like "#1" or "1")
+				const normalizedId = normalizeElevatorId(elevatorId, this.app.elevatorService);
+
+				if (!normalizedId) {
+					this.logger.error(getElevatorNotFoundMessage(elevatorId, this.app.elevatorService));
+					return;
+				}
+
+				elevatorIds = [normalizedId];
+			} else {
+				// No specific elevator requested, query all
+				elevatorIds = this.app.elevatorService.listElevators();
 			}
 
 			// Get buttons for all requested elevators

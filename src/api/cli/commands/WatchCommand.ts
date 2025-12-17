@@ -2,6 +2,9 @@ import { Command } from 'commander';
 import { Application } from '../../../app/app';
 import { BaseCommand } from './CommandBase';
 import { ElevatorStateChangeEvent } from '../../../domain/elevator/types';
+import { Logger } from '../../../infra/logger/Logger';
+import { normalizeElevatorId, getElevatorNotFoundMessage } from './CommandHelpers';
+import { AggregatedElevatorStateChangeEvents, ElevatorAvailabilityEvent } from '../../../domain/services/types';
 
 /**
  * Command to watch elevator events in real-time.
@@ -13,8 +16,8 @@ import { ElevatorStateChangeEvent } from '../../../domain/elevator/types';
 export class WatchCommand extends BaseCommand {
 	private isWatching: boolean = false;
 
-	constructor(private readonly app: Application) {
-		super('WatchCommand');
+	constructor(private readonly app: Application, logger?: Logger) {
+		super(logger);
 	}
 
 	register(program: Command): void {
@@ -22,7 +25,7 @@ export class WatchCommand extends BaseCommand {
 			.command('watch')
 			.alias('w')
 			.description('Watch elevator events in real-time (Ctrl+C to stop)')
-			.argument('[elevator-id]', 'Specific elevator ID to watch (optional, default: all)')
+			.argument('[elevator-id]', 'Specific elevator ID to watch (e.g., #1, 2, or Elevator#3)')
 			.option('-a, --availability', 'Watch elevator availability events (add/remove)')
 			.option('-q, --quiet', 'Show only state changes, no extra details')
 			.action((elevatorId: string | undefined, options) => {
@@ -40,25 +43,30 @@ export class WatchCommand extends BaseCommand {
 	 * @param options - Command options for filtering events
 	 */
 	private execute(
-		elevatorId: string | undefined, 
+		elevatorId: string | undefined,
 		options: { availability?: boolean; quiet?: boolean }
 	): void {
 		try {
-			// Validate that the specific elevator exists if one was requested
+			// Normalize and validate the elevator ID if one was provided
+			let normalizedId: string | undefined;
+
 			if (elevatorId) {
-				const elevatorIds = this.app.elevatorService.listElevators();
-				if (!elevatorIds.includes(elevatorId)) {
-					this.logger.error(`Elevator '${elevatorId}' not found`);
+				const result = normalizeElevatorId(elevatorId, this.app.elevatorService);
+
+				if (!result) {
+					this.logger.error(getElevatorNotFoundMessage(elevatorId, this.app.elevatorService));
 					return;
 				}
+
+				normalizedId = result;
 			}
 
 			this.isWatching = true;
 
 			// Display header
 			console.log('\n' + '═'.repeat(70));
-			if (elevatorId) {
-				console.log(`Watching events for: ${elevatorId}`);
+			if (normalizedId) {
+				console.log(`Watching events for: ${normalizedId}`);
 			} else {
 				console.log('Watching events for: All elevators');
 			}
@@ -69,21 +77,22 @@ export class WatchCommand extends BaseCommand {
 			console.log('═'.repeat(70) + '\n');
 
 			// Set up state change listeners
-			if (elevatorId) {
+			if (normalizedId) {
 				// Watch a specific elevator
-				this.app.elevatorService.listen(elevatorId, (event: ElevatorStateChangeEvent) => {
-					this.displayStateChange(elevatorId, event, options.quiet);
+				const elevatorToWatch = normalizedId; // Capture for closure
+				this.app.elevatorService.listen(elevatorToWatch, (event: ElevatorStateChangeEvent) => {
+					this.displayStateChange(elevatorToWatch, event, options.quiet);
 				});
 			} else {
 				// Watch all elevators via the aggregated 'state' event
-				this.app.elevatorService.listen('state', (event: any) => {
+				this.app.elevatorService.listen('state', (event: AggregatedElevatorStateChangeEvents) => {
 					this.displayStateChange(event.elevator, event, options.quiet);
 				});
 			}
 
 			// Set up availability listeners if requested
 			if (options.availability) {
-				this.app.elevatorService.listen('availability', (event: any) => {
+				this.app.elevatorService.listen('availability', (event: ElevatorAvailabilityEvent) => {
 					this.displayAvailabilityEvent(event);
 				});
 			}
@@ -91,7 +100,7 @@ export class WatchCommand extends BaseCommand {
 			// Note: In interactive mode, the user can continue typing commands
 			// The watch will continue in the background until they exit the CLI
 			// or manually remove listeners (which we don't currently support via CLI)
-			
+
 		} catch (error) {
 			// Handle errors gracefully
 			this.isWatching = false;
@@ -111,24 +120,24 @@ export class WatchCommand extends BaseCommand {
 	 * @param quiet - If true, show minimal output
 	 */
 	private displayStateChange(
-		elevatorId: string, 
-		event: ElevatorStateChangeEvent, 
+		elevatorId: string,
+		event: ElevatorStateChangeEvent,
 		quiet?: boolean
 	): void {
 		const timestamp = new Date().toISOString().split('T')[1].split('.')[0]; // HH:MM:SS format
-		
+
 		if (quiet) {
 			// Minimal output: just the state transition
 			console.log(`[${timestamp}] ${elevatorId}: ${event.from.type} → ${event.to.type}`);
 		} else {
 			// Detailed output: include floor information
-			const fromFloor = 'atFloor' in event.from 
-				? `floor ${event.from.atFloor}` 
+			const fromFloor = 'atFloor' in event.from
+				? `floor ${event.from.atFloor}`
 				: `${event.from.fromFloor}→${event.from.toFloor}`;
-			const toFloor = 'atFloor' in event.to 
-				? `floor ${event.to.atFloor}` 
+			const toFloor = 'atFloor' in event.to
+				? `floor ${event.to.atFloor}`
 				: `${event.to.fromFloor}→${event.to.toFloor}`;
-			
+
 			console.log(
 				`[${timestamp}] ${elevatorId.padEnd(15)} ` +
 				`${event.from.type.padEnd(12)} (${fromFloor}) → ` +
@@ -142,13 +151,18 @@ export class WatchCommand extends BaseCommand {
 	 * 
 	 * @param event - The availability event
 	 */
-	private displayAvailabilityEvent(event: any): void {
+	private displayAvailabilityEvent(event: ElevatorAvailabilityEvent): void {
 		const timestamp = new Date().toISOString().split('T')[1].split('.')[0]; // HH:MM:SS format
-		
+
 		if (event.type === 'added') {
+			// For added events, show the floor information based on state type
+			const floorInfo = 'atFloor' in event.state
+				? `at floor ${event.state.atFloor}`
+				: `moving ${event.state.fromFloor}→${event.state.toFloor}`;
+
 			console.log(
 				`[${timestamp}] ⊕ Elevator ${event.elevator} added ` +
-				`(${event.state.type} at floor ${event.state.atFloor})`
+				`(${event.state.type} ${floorInfo})`
 			);
 		} else if (event.type === 'removed') {
 			console.log(`[${timestamp}] ⊖ Elevator ${event.elevator} removed`);

@@ -1,11 +1,12 @@
 import { Command } from 'commander';
 import { Application } from '../../../app/app';
 import { BaseCommand } from './CommandBase';
+import { Logger } from '../../../infra/logger/Logger';
 
 export class HealthCommand extends BaseCommand {
 
-	constructor(private readonly app: Application) {
-		super('HealthCommand');
+	constructor(private readonly app: Application, logger?: Logger) {
+		super(logger);
 	}
 
 	register(program: Command): void {

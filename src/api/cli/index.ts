@@ -9,8 +9,10 @@ import { StatusCommand } from './commands/StatusCommand';
 import { ButtonsCommand } from './commands/ButtonsCommand';
 import { WatchCommand } from './commands/WatchCommand';
 import { InfoCommand } from './commands/InfoCommand';
+import { SimulateCommand } from './commands/SimulateCommand';
 import { Logger } from '../../infra/logger/Logger';
 import { Application } from '../../app/app';
+import { CliOptions } from '../../options';
 
 export class CliApi {
 	private cli: Command;
@@ -18,9 +20,9 @@ export class CliApi {
 	private logger: Logger;
 	private app: Application;
 
-	constructor(app: Application) {
+	constructor(app: Application, options: CliOptions) {
 		this.app = app;
-		this.logger = new Logger('cli');
+		this.logger = new Logger('cli', options.LOG_LEVEL);
 		this.logger.debug('Initializing CLI application...');
 
 		this.cli = new Command()
@@ -33,16 +35,17 @@ export class CliApi {
 		this.helpCommand.register(this.cli);
 
 		// System commands
-		(new HealthCommand(this.app)).register(this.cli);
-		(new ExitCommand(this.app)).register(this.cli);
+		(new HealthCommand(this.app, this.logger)).register(this.cli);
+		(new ExitCommand(this.app, this.logger)).register(this.cli);
 
 		// Elevator service commands
-		(new AddRideCommand(this.app)).register(this.cli);
-		(new ListElevatorsCommand(this.app)).register(this.cli);
-		(new StatusCommand(this.app)).register(this.cli);
-		(new ButtonsCommand(this.app)).register(this.cli);
-		(new WatchCommand(this.app)).register(this.cli);
-		(new InfoCommand(this.app)).register(this.cli);
+		(new AddRideCommand(this.app, this.logger)).register(this.cli);
+		(new ListElevatorsCommand(this.app, this.logger)).register(this.cli);
+		(new StatusCommand(this.app, this.logger)).register(this.cli);
+		(new ButtonsCommand(this.app, this.logger)).register(this.cli);
+		(new WatchCommand(this.app, this.logger)).register(this.cli);
+		(new InfoCommand(this.app, this.logger)).register(this.cli);
+		(new SimulateCommand(this.app, this.logger)).register(this.cli);
 	}
 
 
@@ -64,14 +67,10 @@ export class CliApi {
 		// No commands provided - start interactive REPL mode
 		// Always prevent commander from exiting in interactive mode (except for exit command)
 		this.cli.exitOverride((err) => {
-			// In interactive mode, never exit - just return
-			// Only exit on actual errors if not in keepAlive mode
+			// In interactive mode, convert exits to exceptions that we can catch
+			// This allows us to handle errors gracefully without killing the process
 			// Note: exit/quit commands call process.exit directly, bypassing this
-			if (err.exitCode !== 0 && !keepAlive) {
-				this.logger.error(`Exiting with code ${err.exitCode}`);
-				process.exit(err.exitCode);
-			}
-			// Otherwise, just return and keep the process alive
+			throw err;
 		});
 
 		// Start interactive REPL
@@ -83,6 +82,22 @@ export class CliApi {
 			input: process.stdin,
 			output: process.stdout,
 			prompt: 'stabelo-elevator> ',
+		});
+
+		// Configure the CLI to not show help automatically after errors
+		// We'll handle error display ourselves for a cleaner UX
+		this.cli.showHelpAfterError(false);
+		this.cli.configureOutput({
+			writeErr: (str) => {
+				// Intercept Commander's error output and display it through our logger
+				// Remove the 'error: ' prefix that Commander adds since our logger adds it
+				const message = str.replace(/^error:\s*/i, '').trim();
+				if (message) {
+					this.logger.error(message);
+				}
+			},
+			// Keep normal output going to stdout as usual
+			writeOut: (str) => process.stdout.write(str)
 		});
 
 		console.log('Stabelo Elevator - Interactive CLI Mode');
@@ -98,11 +113,23 @@ export class CliApi {
 				// Parse the input as if it were command line arguments
 				const args = ['node', 'stabelo-elevator', ...input.split(/\s+/)];
 
-				// Run the command, taking care to override the help command to prevent exit in interactive mode
-				if (args[2] === 'help') {
-					await this.helpCommand.runWithoutExiting(args);
-				} else {
-					await this.cli.parseAsync(args);
+				try {
+					// Run the command, taking care to override the help command to prevent exit in interactive mode
+					if (args[2] === 'help') {
+						await this.helpCommand.runWithoutExiting(args);
+					} else {
+						await this.cli.parseAsync(args);
+					}
+				} catch (error) {
+					// Handle command errors gracefully in interactive mode
+					// This catches unknown commands, invalid arguments, etc.
+					if (error instanceof Error) {
+						// Commander errors often have helpful messages, so display them
+						this.logger.error(error.message);
+					} else {
+						this.logger.error('An error occurred while executing the command');
+					}
+					// Don't exit - just continue to the next prompt
 				}
 			}
 

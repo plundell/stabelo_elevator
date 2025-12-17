@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { Application } from '../../../app/app';
 import { BaseCommand } from './CommandBase';
+import { Logger } from '../../../infra/logger/Logger';
 
 /**
  * Command to display information about the elevator service configuration.
@@ -10,8 +11,8 @@ import { BaseCommand } from './CommandBase';
  */
 export class InfoCommand extends BaseCommand {
 
-	constructor(private readonly app: Application) {
-		super('InfoCommand');
+	constructor(private readonly app: Application, logger?: Logger) {
+		super(logger);
 	}
 
 	register(program: Command): void {
@@ -55,7 +56,7 @@ export class InfoCommand extends BaseCommand {
 
 			// JSON mode: output structured data
 			if (options.json) {
-				const output: any = {};
+				const output: { configuration?: typeof config; statistics?: typeof stats } = {};
 				if (!options.statsOnly) {
 					output.configuration = config;
 				}

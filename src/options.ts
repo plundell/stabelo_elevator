@@ -49,12 +49,11 @@ export type AppOptions = {
 	INITIAL_FLOOR: number;
 
 	/** The log level */
-	LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
+	LOG_LEVEL: LogLevel;
 };
 
 
-
-
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export const defaultOptions: AppOptions = {
 	TRAVEL_TIME_PER_FLOOR: 1000,
@@ -68,6 +67,10 @@ export const defaultOptions: AppOptions = {
 	LOG_LEVEL: 'debug',
 };
 
+
+export type CliOptions = {
+	LOG_LEVEL: LogLevel;
+};
 
 export function parseOptions(options: Record<string, unknown>, defaultOptions: AppOptions): AppOptions {
 	const parsedOptions: AppOptions = { ...defaultOptions };

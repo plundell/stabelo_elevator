@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { Application } from '../../../app/app';
 import { BaseCommand } from './CommandBase';
+import { Logger } from '../../../infra/logger/Logger';
 
 /**
  * Command to add a ride request to the elevator service.
@@ -11,8 +12,8 @@ import { BaseCommand } from './CommandBase';
  */
 export class AddRideCommand extends BaseCommand {
 
-	constructor(private readonly app: Application) {
-		super('AddRideCommand');
+	constructor(private readonly app: Application, logger?: Logger) {
+		super(logger);
 	}
 
 	register(program: Command): void {

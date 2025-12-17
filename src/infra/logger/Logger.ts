@@ -35,10 +35,15 @@ function getLevel(level: keyof typeof LogLevels | number): number {
 }
 
 export class Logger {
-	private lowestLevel: number;
+	private lowestLevel: number = 0;
 
 	constructor(private readonly name?: string, lowestLevel: keyof typeof LogLevels | number = 'debug') {
-		this.lowestLevel = getLevel(lowestLevel);
+		this.setLevel(lowestLevel);
+		// console.log('-------------------------------------', lowestLevel, getLevel(lowestLevel), LogLevels[lowestLevel] as unknown as any);
+	}
+
+	setLevel(level: keyof typeof LogLevels | number): void {
+		this.lowestLevel = getLevel(level);
 	}
 
 	private format(level: keyof typeof LogLevels, message: string): string {

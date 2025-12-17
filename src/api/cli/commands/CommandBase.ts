@@ -4,8 +4,8 @@ import { Command } from "commander";
 export abstract class BaseCommand {
 	protected logger: Logger;
 
-	constructor(name: string) {
-		this.logger = new Logger(name);
+	constructor(logger?: Logger) {
+		this.logger = logger ?? new Logger(this.constructor.name);
 	}
 
 	abstract register(cli: Command): void;

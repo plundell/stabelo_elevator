@@ -2,6 +2,8 @@ import { Command } from 'commander';
 import { Application } from '../../../app/app';
 import { BaseCommand } from './CommandBase';
 import { ElevatorStates } from '../../../domain/elevator/types';
+import { Logger } from '../../../infra/logger/Logger';
+import { normalizeElevatorId, getElevatorNotFoundMessage } from './CommandHelpers';
 
 /**
  * Command to get detailed status information about one or all elevators.
@@ -14,8 +16,8 @@ import { ElevatorStates } from '../../../domain/elevator/types';
  */
 export class StatusCommand extends BaseCommand {
 
-	constructor(private readonly app: Application) {
-		super('StatusCommand');
+	constructor(private readonly app: Application, logger?: Logger) {
+		super(logger);
 	}
 
 	register(program: Command): void {
@@ -23,7 +25,7 @@ export class StatusCommand extends BaseCommand {
 			.command('status')
 			.alias('st')
 			.description('Get detailed status of one or all elevators')
-			.argument('[elevator-id]', 'Specific elevator ID to check (optional)')
+			.argument('[elevator-id]', 'Specific elevator ID to check (e.g., #1, 2, or Elevator#3)')
 			.option('-j, --json', 'Output in JSON format')
 			.action((elevatorId: string | undefined, options) => {
 				this.execute(elevatorId, options);
@@ -39,14 +41,21 @@ export class StatusCommand extends BaseCommand {
 	private execute(elevatorId: string | undefined, options: { json?: boolean }): void {
 		try {
 			// Determine which elevators to query
-			const elevatorIds = elevatorId 
-				? [elevatorId] 
-				: this.app.elevatorService.listElevators();
+			let elevatorIds: string[];
 
-			// Validate that the specific elevator exists if one was requested
-			if (elevatorId && elevatorIds.length === 0) {
-				this.logger.error(`Elevator '${elevatorId}' not found`);
-				return;
+			if (elevatorId) {
+				// Normalize the elevator ID (supports shorthand like "#1" or "1")
+				const normalizedId = normalizeElevatorId(elevatorId, this.app.elevatorService);
+
+				if (!normalizedId) {
+					this.logger.error(getElevatorNotFoundMessage(elevatorId, this.app.elevatorService));
+					return;
+				}
+
+				elevatorIds = [normalizedId];
+			} else {
+				// No specific elevator requested, query all
+				elevatorIds = this.app.elevatorService.listElevators();
 			}
 
 			// Get state for all requested elevators
@@ -57,11 +66,11 @@ export class StatusCommand extends BaseCommand {
 					return { id, state, buttons, error: null };
 				} catch (error) {
 					// Handle per-elevator errors gracefully
-					return { 
-						id, 
-						state: null, 
-						buttons: null, 
-						error: error instanceof Error ? error.message : 'Unknown error' 
+					return {
+						id,
+						state: null,
+						buttons: null,
+						error: error instanceof Error ? error.message : 'Unknown error'
 					};
 				}
 			});
@@ -72,12 +81,12 @@ export class StatusCommand extends BaseCommand {
 					if (error) {
 						return { id, error };
 					}
-					
+
 					// Extract floor information based on state type
-					const floorInfo = 'atFloor' in state! 
+					const floorInfo = 'atFloor' in state!
 						? { floor: state!.atFloor }
 						: { fromFloor: state!.fromFloor, toFloor: state!.toFloor };
-					
+
 					return {
 						id,
 						state: {
@@ -107,7 +116,7 @@ export class StatusCommand extends BaseCommand {
 
 				// Display current state
 				console.log(`State:        ${state!.type}`);
-				
+
 				// Display floor information based on state type
 				if ('atFloor' in state!) {
 					console.log(`Floor:        ${state!.atFloor}`);
@@ -115,7 +124,7 @@ export class StatusCommand extends BaseCommand {
 					console.log(`From Floor:   ${state!.fromFloor}`);
 					console.log(`To Floor:     ${state!.toFloor}`);
 				}
-				
+
 				console.log(`Start Time:   ${new Date(state!.startTime).toISOString()}`);
 				console.log(`Duration:     ${Date.now() - state!.startTime}ms`);
 
@@ -147,7 +156,7 @@ export class StatusCommand extends BaseCommand {
 	 */
 	private getStateSpecificFields(state: ElevatorStates): Record<string, unknown> {
 		const fields: Record<string, unknown> = {};
-		
+
 		// Extract timing-related fields (not floor-related, as those are handled separately)
 		if ('dueTime' in state) {
 			fields.dueTime = state.dueTime;
@@ -158,7 +167,7 @@ export class StatusCommand extends BaseCommand {
 		if ('willClose' in state) {
 			fields.willClose = state.willClose;
 		}
-		
+
 		return fields;
 	}
 
@@ -171,15 +180,15 @@ export class StatusCommand extends BaseCommand {
 	 */
 	private displayStateSpecificFields(state: ElevatorStates): void {
 		// Display timing fields specific to the current state type
-		if ('dueTime' in state) {
+		if ('dueTime' in state && typeof state.dueTime === 'number') {
 			console.log(`Due Time:     ${new Date(state.dueTime).toISOString()}`);
 			console.log(`Time to Due:  ${Math.max(0, state.dueTime - Date.now())}ms`);
 		}
-		if ('willArrive' in state) {
+		if ('willArrive' in state && typeof state.willArrive === 'number') {
 			console.log(`Will Arrive:  ${new Date(state.willArrive).toISOString()}`);
 			console.log(`Time to Arr:  ${Math.max(0, state.willArrive - Date.now())}ms`);
 		}
-		if ('willClose' in state) {
+		if ('willClose' in state && typeof state.willClose === 'number') {
 			console.log(`Will Close:   ${new Date(state.willClose).toISOString()}`);
 			console.log(`Time to Cls:  ${Math.max(0, state.willClose - Date.now())}ms`);
 		}
